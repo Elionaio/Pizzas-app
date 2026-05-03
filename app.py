@@ -69,7 +69,7 @@ if modo == "📝 Atendente":
     """, height=100)
 
     if comando:
-        st.success("Você disse: " + comando)
+        st.success(f"Você disse: {comando}")
 
         c = comando.lower()
 
