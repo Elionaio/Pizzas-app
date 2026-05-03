@@ -3,7 +3,6 @@ import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
-from streamlit_mic_recorder import mic_recorder
 
 # =========================
 # AUTO REFRESH
@@ -40,21 +39,53 @@ if modo == "📝 Atendente":
     sabor = st.text_input("Sabor")
     obs = st.text_input("Observações")
 
-    # 🎤 VOZ
-    st.subheader("🎤 Falar Pedido")
+    # =========================
+    # 🎤 VOZ GRÁTIS (NAVEGADOR)
+    # =========================
+    st.subheader("🎤 Falar")
 
-    audio = mic_recorder(start_prompt="🎤 Falar", stop_prompt="Parar")
+    st.markdown("""
+    <button onclick="startRecognition()" style="font-size:18px;padding:10px;">
+    🎤 Falar
+    </button>
 
-    # ⚠️ ainda não transcreve automaticamente
-    comando = st.text_input("Texto da voz (simulação por enquanto)")
+    <p id="output" style="font-size:18px;color:green;"></p>
 
+    <script>
+    function startRecognition() {
+        var recognition = new webkitSpeechRecognition();
+        recognition.lang = "pt-BR";
+        recognition.start();
+
+        recognition.onresult = function(event) {
+            var text = event.results[0][0].transcript;
+            document.getElementById("output").innerHTML = text;
+
+            // envia pro Streamlit
+            window.parent.postMessage({
+                type: "streamlit:setComponentValue",
+                value: text
+            }, "*");
+        }
+    }
+    </script>
+    """, unsafe_allow_html=True)
+
+    comando = st.text_input("Texto capturado")
+
+    # =========================
+    # INTERPRETAÇÃO SIMPLES
+    # =========================
     if comando:
-        st.success(f"Comando capturado: {comando}")
+        comando_lower = comando.lower()
 
-        # exemplo simples
-        if "calabresa" in comando.lower():
+        if "calabresa" in comando_lower:
             sabor = "Calabresa"
-        if "sem cebola" in comando.lower():
+
+        if "frango" in comando_lower:
+            sabor = "Frango"
+
+        if "sem cebola" in comando_lower:
             obs = "Sem cebola"
 
     if st.button("Enviar Pedido"):
@@ -149,7 +180,6 @@ elif modo == "🔥 Produção":
                     if st.button("Finalizar", key=key):
                         db.reference(f'pedidos/{key}').delete()
                         st.rerun()
-
     else:
         st.info("Sem pedidos")
 
