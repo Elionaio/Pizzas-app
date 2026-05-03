@@ -19,19 +19,43 @@ if not firebase_admin._apps:
     })
 
 # =========================
-# TÍTULO
+# MODO
 # =========================
 st.title("🍕 Sistema de Pedidos")
 
-modo_producao = st.toggle("🔥 Modo Produção (Tela Cheia)")
+modo = st.radio("Modo", ["📝 Atendente", "🔥 Produção", "📋 Lista"])
 
 ref = db.reference('pedidos')
 dados = ref.get()
 
 # =========================
-# MODO PRODUÇÃO
+# 📝 ATENDENTE
 # =========================
-if modo_producao:
+if modo == "📝 Atendente":
+
+    st.subheader("Novo Pedido")
+
+    nome = st.text_input("Nome")
+    sabor = st.text_input("Sabor")
+    obs = st.text_input("Observações")
+
+    if st.button("Enviar Pedido"):
+        if nome and sabor:
+            pedido = {
+                "nome": nome,
+                "sabor": sabor,
+                "obs": obs,
+                "criado_em": datetime.utcnow().timestamp()
+            }
+            db.reference('pedidos').push(pedido)
+            st.success("Pedido enviado!")
+        else:
+            st.warning("Preencha nome e sabor")
+
+# =========================
+# 🔥 PRODUÇÃO (TELA GRANDE)
+# =========================
+elif modo == "🔥 Produção":
 
     if dados:
         pedidos_lista = list(dados.items())
@@ -44,8 +68,6 @@ if modo_producao:
         agora = datetime.utcnow()
 
         col1, col2 = st.columns(2)
-
-        # pega só os 2 primeiros (foco total)
         pedidos_ativos = pedidos_lista[:2]
 
         for i, (key, pedido) in enumerate(pedidos_ativos):
@@ -88,9 +110,9 @@ if modo_producao:
                 background-color:{cor};
                 color:white;
                 text-align:center;
-                font-size:22px;
+                font-size:24px;
             ">
-                <h2>🍕 {pedido.get('sabor','')}</h2>
+                <h2>{pedido.get('sabor','')}</h2>
                 <h3>{pedido.get('nome','')}</h3>
                 <h1>{minutos}m {segundos}s</h1>
                 <p>{status}</p>
@@ -114,11 +136,11 @@ if modo_producao:
         st.info("Sem pedidos")
 
 # =========================
-# MODO LISTA
+# 📋 LISTA
 # =========================
 else:
 
-    st.subheader("📋 Lista de Pedidos")
+    st.subheader("Lista de Pedidos")
 
     if dados:
         pedidos_lista = list(dados.values())
