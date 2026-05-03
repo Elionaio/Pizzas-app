@@ -2,11 +2,12 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timedelta
+from streamlit_autorefresh import st_autorefresh
 
 # =========================
 # AUTO REFRESH
 # =========================
-st.autorefresh(interval=2000, key="refresh")
+st_autorefresh(interval=2000, key="refresh")
 
 # =========================
 # FIREBASE
@@ -61,7 +62,7 @@ if modo == "Cozinha":
     if dados:
         pedidos_lista = list(dados.items())
 
-        # ordenar por criação (mais correto que key)
+        # ordenar corretamente
         pedidos_lista = sorted(
             pedidos_lista,
             key=lambda x: x[1].get("criado_em", 0)
@@ -73,7 +74,7 @@ if modo == "Cozinha":
 
             tempo_preparo = 15 + (i * 10)
 
-            # inicializa tempo
+            # garantir início
             if "inicio" not in pedido:
                 inicio_ts = datetime.utcnow().timestamp()
                 db.reference(f'pedidos/{key}/inicio').set(inicio_ts)
@@ -84,12 +85,13 @@ if modo == "Cozinha":
             fim = inicio + timedelta(minutes=tempo_preparo)
             restante = fim - agora
 
-            minutos = int(restante.total_seconds() // 60)
-            segundos = int(restante.total_seconds() % 60)
-
             if restante.total_seconds() <= 0:
                 status = "✅ Pronto"
+                minutos = 0
+                segundos = 0
             else:
+                minutos = int(restante.total_seconds() // 60)
+                segundos = int(restante.total_seconds() % 60)
                 status = f"⏳ {minutos}m {segundos}s"
 
             st.markdown(f"""
@@ -102,7 +104,6 @@ if modo == "Cozinha":
             🔥 Status: {status}
             """)
 
-            # FINALIZAR
             if st.button(f"Finalizar Pedido {i+1}", key=key):
                 db.reference(f'pedidos/{key}').delete()
                 st.rerun()
@@ -113,7 +114,7 @@ if modo == "Cozinha":
         st.info("Sem pedidos")
 
 # =========================
-# LISTA GERAL (OPCIONAL)
+# VISÃO GERAL
 # =========================
 st.divider()
 st.subheader("📋 Visão Geral")
