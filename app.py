@@ -205,7 +205,7 @@ else:
     else:
         st.info("Nenhum pedido ainda")            pedidos_lista,
             key=lambda x: x[1].get("criado_em", 0)
-        )
+        
 
         agora = datetime.utcnow()
 
