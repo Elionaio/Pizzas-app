@@ -204,7 +204,7 @@ else:
             st.divider()
     else:
         st.info("Nenhum pedido ainda")
-        
+    
         agora = datetime.utcnow()
 
         col1, col2 = st.columns(2)
