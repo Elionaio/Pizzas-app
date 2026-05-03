@@ -2,15 +2,14 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timedelta
-from streamlit_autorefresh import st_autorefresh
 
 # =========================
 # AUTO REFRESH
 # =========================
-st_autorefresh(interval=2000, key="refresh")
+st.autorefresh(interval=2000, key="refresh")
 
 # =========================
-# FIREBASE
+# CONEXÃO FIREBASE
 # =========================
 if not firebase_admin._apps:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
@@ -19,62 +18,33 @@ if not firebase_admin._apps:
     })
 
 # =========================
-# MODO
+# INTERFACE
 # =========================
 st.title("🍕 Sistema de Pedidos")
 
-modo = st.radio("Modo", ["Atendente", "Cozinha"])
+# Botão para alternar entre lista e tela cheia
+modo_producao = st.checkbox("Modo Produção (Tela Cheia)")
 
-# =========================
-# MODO ATENDENTE
-# =========================
-if modo == "Atendente":
-
-    st.subheader("📝 Novo Pedido")
-
-    nome = st.text_input("Nome do cliente")
-    sabor = st.text_input("Sabor da pizza")
-    obs = st.text_input("Observações")
-
-    if st.button("Enviar Pedido"):
-        if nome and sabor:
-            pedido = {
-                "nome": nome,
-                "sabor": sabor,
-                "obs": obs,
-                "criado_em": datetime.utcnow().timestamp()
-            }
-            db.reference('pedidos').push(pedido)
-            st.success("Pedido enviado!")
-        else:
-            st.warning("Preencha nome e sabor")
-
-# =========================
-# MODO COZINHA
-# =========================
-if modo == "Cozinha":
-
+if modo_producao:
+    # =========================
+    # MODO PRODUÇÃO (DUAS COLUNAS)
+    # =========================
     st.subheader("🔥 Fila de Produção")
+
+    col1, col2 = st.columns(2)  # duas colunas lado a lado
 
     ref = db.reference('pedidos')
     dados = ref.get()
 
     if dados:
         pedidos_lista = list(dados.items())
-
-        # ordenar corretamente
-        pedidos_lista = sorted(
-            pedidos_lista,
-            key=lambda x: x[1].get("criado_em", 0)
-        )
+        pedidos_lista = sorted(pedidos_lista, key=lambda x: x[0])  # ordenar por chave de chegada
 
         agora = datetime.utcnow()
 
         for i, (key, pedido) in enumerate(pedidos_lista):
-
             tempo_preparo = 15 + (i * 10)
 
-            # garantir início
             if "inicio" not in pedido:
                 inicio_ts = datetime.utcnow().timestamp()
                 db.reference(f'pedidos/{key}/inicio').set(inicio_ts)
@@ -84,26 +54,48 @@ if modo == "Cozinha":
 
             fim = inicio + timedelta(minutes=tempo_preparo)
             restante = fim - agora
+            minutos = int(restante.total_seconds() // 60)
+            segundos = int(restante.total_seconds() % 60)
 
             if restante.total_seconds() <= 0:
-                status = "✅ Pronto"
-                minutos = 0
-                segundos = 0
+                status = "✅ PRONTO"
+                cor = "green"
+                st.audio("https://www.soundjay.com/buttons/beep-01a.mp3")
+            elif restante.total_seconds() < 300:
+                status = f"⚠️ {minutos}m {segundos}s"
+                cor = "orange"
             else:
-                minutos = int(restante.total_seconds() // 60)
-                segundos = int(restante.total_seconds() % 60)
                 status = f"⏳ {minutos}m {segundos}s"
+                cor = "red"
 
-            st.markdown(f"""
-            ### 🍕 Pedido {i+1}
-            👤 {pedido.get('nome', '')}  
-            🍕 {pedido.get('sabor', '')}  
-            📝 {pedido.get('obs', '')}  
+            col_index = i % 2  # alterna entre colunas
 
-            ⏱️ Tempo: {tempo_preparo} min  
-            🔥 Status: {status}
-            """)
+            if col_index == 0:
+                with col1:
+                    st.markdown(f"""
+                    <div style="padding:15px;border-radius:10px;background-color:{cor};color:white">
+                    <h3>🍕 Pedido {i+1}</h3>
+                    👤 {pedido.get('nome', '')}<br>
+                    🍕 {pedido.get('sabor', '')}<br>
+                    📝 {pedido.get('obs', '')}<br><br>
+                    ⏱️ Tempo: {tempo_preparo} min<br>
+                    🔥 Status: {status}
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                with col2:
+                    st.markdown(f"""
+                    <div style="padding:15px;border-radius:10px;background-color:{cor};color:white">
+                    <h3>🍕 Pedido {i+1}</h3>
+                    👤 {pedido.get('nome', '')}<br>
+                    🍕 {pedido.get('sabor', '')}<br>
+                    📝 {pedido.get('obs', '')}<br><br>
+                    ⏱️ Tempo: {tempo_preparo} min<br>
+                    🔥 Status: {status}
+                    </div>
+                    """, unsafe_allow_html=True)
 
+            # BOTÃO FINALIZAR
             if st.button(f"Finalizar Pedido {i+1}", key=key):
                 db.reference(f'pedidos/{key}').delete()
                 st.rerun()
@@ -113,25 +105,25 @@ if modo == "Cozinha":
     else:
         st.info("Sem pedidos")
 
-# =========================
-# VISÃO GERAL
-# =========================
-st.divider()
-st.subheader("📋 Visão Geral")
-
-ref = db.reference('pedidos')
-dados = ref.get()
-
-if dados:
-    pedidos_lista = list(dados.values())
-    pedidos_lista.reverse()
-
-    for i, pedido in enumerate(pedidos_lista):
-        st.markdown(f"""
-        **Pedido {i+1}**  
-        👤 {pedido.get('nome', '')}  
-        🍕 {pedido.get('sabor', '')}  
-        📝 {pedido.get('obs', '')}
-        """)
 else:
-    st.info("Nenhum pedido ainda")
+    # =========================
+    # MODO LISTA SIMPLES
+    # =========================
+    st.subheader("📋 Pedidos em Lista")
+
+    ref = db.reference('pedidos')
+    dados = ref.get()
+
+    if dados:
+        pedidos_lista = list(dados.values())
+        pedidos_lista.reverse()
+
+        for i, pedido in enumerate(pedidos_lista):
+            st.markdown(f"""
+            **Pedido {i+1}**  
+            👤 **Cliente:** {pedido.get('nome', '')}  
+            🍕 **Sabor:** {pedido.get('sabor', '')}  
+            📝 **Obs:** {pedido.get('obs', '')}
+            """)
+            st.divider()
+    else:
