@@ -16,31 +16,63 @@ if not firebase_admin._apps:
 # =========================
 # INTERFACE
 # =========================
+import time
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Sistema de Pedidos", layout="centered")
+st.subheader("🔥 Fila de Produção")
 
-st.title("🍕 Sistema de Pedidos")
+ref = db.reference('pedidos')
+dados = ref.get()
 
-# INPUTS
-nome = st.text_input("Nome do cliente")
-sabor = st.text_input("Sabor da pizza")
-obs = st.text_input("Observações")
+if dados:
+    pedidos_lista = list(dados.items())  # pega chave + valor
 
-# BOTÃO ENVIAR
-if st.button("Enviar Pedido"):
-    if nome and sabor:
-        pedido = {
-            "nome": nome,
-            "sabor": sabor,
-            "obs": obs
-        }
+    # ordenar por ordem de chegada
+    pedidos_lista = sorted(pedidos_lista, key=lambda x: x[0])
 
-        ref = db.reference('pedidos')
-        ref.push(pedido)
+    agora = datetime.utcnow()
 
-        st.success("Pedido enviado!")
-    else:
-        st.warning("Preencha nome e sabor")
+    for i, (key, pedido) in enumerate(pedidos_lista):
+
+        tempo_preparo = 15 + (i * 10)
+
+        # cria timestamp se não existir
+        if "inicio" not in pedido:
+            inicio = datetime.utcnow().timestamp()
+            db.reference(f'pedidos/{key}/inicio').set(inicio)
+        else:
+            inicio = datetime.fromtimestamp(pedido["inicio"])
+
+        fim = inicio + timedelta(minutes=tempo_preparo)
+        restante = fim - agora
+
+        minutos = int(restante.total_seconds() // 60)
+        segundos = int(restante.total_seconds() % 60)
+
+        if restante.total_seconds() <= 0:
+            status = "✅ Pronto"
+        else:
+            status = f"⏳ {minutos}m {segundos}s"
+
+        st.markdown(f"""
+        ### 🍕 Pedido {i+1}
+        👤 {pedido.get('nome', '')}  
+        🍕 {pedido.get('sabor', '')}  
+        📝 {pedido.get('obs', '')}  
+
+        ⏱️ Tempo: {tempo_preparo} min  
+        🔥 Status: {status}
+        """)
+
+        # BOTÃO FINALIZAR
+        if st.button(f"Finalizar Pedido {i+1}"):
+            db.reference(f'pedidos/{key}').delete()
+            st.rerun()
+
+        st.divider()
+
+else:
+    st.info("Sem pedidos")
 
 # =========================
 # LISTAR PEDIDOS
