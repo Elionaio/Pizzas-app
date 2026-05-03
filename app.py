@@ -2,14 +2,15 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timedelta
+from streamlit_autorefresh import st_autorefresh
 
 # =========================
 # AUTO REFRESH
 # =========================
-st.autorefresh(interval=2000, key="refresh")
+st_autorefresh(interval=2000, key="refresh")
 
 # =========================
-# CONEXÃO FIREBASE
+# FIREBASE
 # =========================
 if not firebase_admin._apps:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
@@ -18,31 +19,37 @@ if not firebase_admin._apps:
     })
 
 # =========================
-# INTERFACE
+# TÍTULO
 # =========================
 st.title("🍕 Sistema de Pedidos")
 
-# Botão para alternar entre lista e tela cheia
-modo_producao = st.checkbox("Modo Produção (Tela Cheia)")
+modo_producao = st.toggle("🔥 Modo Produção (Tela Cheia)")
 
+ref = db.reference('pedidos')
+dados = ref.get()
+
+# =========================
+# MODO PRODUÇÃO
+# =========================
 if modo_producao:
-    # =========================
-    # MODO PRODUÇÃO (DUAS COLUNAS)
-    # =========================
-    st.subheader("🔥 Fila de Produção")
-
-    col1, col2 = st.columns(2)  # duas colunas lado a lado
-
-    ref = db.reference('pedidos')
-    dados = ref.get()
 
     if dados:
         pedidos_lista = list(dados.items())
-        pedidos_lista = sorted(pedidos_lista, key=lambda x: x[0])  # ordenar por chave de chegada
+
+        pedidos_lista = sorted(
+            pedidos_lista,
+            key=lambda x: x[1].get("criado_em", 0)
+        )
 
         agora = datetime.utcnow()
 
-        for i, (key, pedido) in enumerate(pedidos_lista):
+        col1, col2 = st.columns(2)
+
+        # pega só os 2 primeiros (foco total)
+        pedidos_ativos = pedidos_lista[:2]
+
+        for i, (key, pedido) in enumerate(pedidos_ativos):
+
             tempo_preparo = 15 + (i * 10)
 
             if "inicio" not in pedido:
@@ -54,65 +61,64 @@ if modo_producao:
 
             fim = inicio + timedelta(minutes=tempo_preparo)
             restante = fim - agora
-            minutos = int(restante.total_seconds() // 60)
-            segundos = int(restante.total_seconds() % 60)
 
             if restante.total_seconds() <= 0:
                 status = "✅ PRONTO"
-                cor = "green"
-                st.audio("https://www.soundjay.com/buttons/beep-01a.mp3")
+                cor = "#16a34a"
+                minutos, segundos = 0, 0
             elif restante.total_seconds() < 300:
-                status = f"⚠️ {minutos}m {segundos}s"
-                cor = "orange"
+                status = "⚠️ QUASE"
+                cor = "#f59e0b"
+                minutos = int(restante.total_seconds() // 60)
+                segundos = int(restante.total_seconds() % 60)
             else:
-                status = f"⏳ {minutos}m {segundos}s"
-                cor = "red"
+                status = "🔥 EM PREPARO"
+                cor = "#dc2626"
+                minutos = int(restante.total_seconds() // 60)
+                segundos = int(restante.total_seconds() % 60)
 
-            col_index = i % 2  # alterna entre colunas
+            bloco = f"""
+            <div style="
+                height:300px;
+                display:flex;
+                flex-direction:column;
+                justify-content:center;
+                align-items:center;
+                border-radius:15px;
+                background-color:{cor};
+                color:white;
+                text-align:center;
+                font-size:22px;
+            ">
+                <h2>🍕 {pedido.get('sabor','')}</h2>
+                <h3>{pedido.get('nome','')}</h3>
+                <h1>{minutos}m {segundos}s</h1>
+                <p>{status}</p>
+            </div>
+            """
 
-            if col_index == 0:
+            if i == 0:
                 with col1:
-                    st.markdown(f"""
-                    <div style="padding:15px;border-radius:10px;background-color:{cor};color:white">
-                    <h3>🍕 Pedido {i+1}</h3>
-                    👤 {pedido.get('nome', '')}<br>
-                    🍕 {pedido.get('sabor', '')}<br>
-                    📝 {pedido.get('obs', '')}<br><br>
-                    ⏱️ Tempo: {tempo_preparo} min<br>
-                    🔥 Status: {status}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(bloco, unsafe_allow_html=True)
+                    if st.button("Finalizar", key=key):
+                        db.reference(f'pedidos/{key}').delete()
+                        st.rerun()
             else:
                 with col2:
-                    st.markdown(f"""
-                    <div style="padding:15px;border-radius:10px;background-color:{cor};color:white">
-                    <h3>🍕 Pedido {i+1}</h3>
-                    👤 {pedido.get('nome', '')}<br>
-                    🍕 {pedido.get('sabor', '')}<br>
-                    📝 {pedido.get('obs', '')}<br><br>
-                    ⏱️ Tempo: {tempo_preparo} min<br>
-                    🔥 Status: {status}
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # BOTÃO FINALIZAR
-            if st.button(f"Finalizar Pedido {i+1}", key=key):
-                db.reference(f'pedidos/{key}').delete()
-                st.rerun()
-
-            st.divider()
+                    st.markdown(bloco, unsafe_allow_html=True)
+                    if st.button("Finalizar", key=key):
+                        db.reference(f'pedidos/{key}').delete()
+                        st.rerun()
 
     else:
         st.info("Sem pedidos")
 
+# =========================
+# MODO LISTA
+# =========================
 else:
-    # =========================
-    # MODO LISTA SIMPLES
-    # =========================
-    st.subheader("📋 Pedidos em Lista")
 
-    ref = db.reference('pedidos')
-    dados = ref.get()
+    st.subheader("📋 Lista de Pedidos")
 
     if dados:
         pedidos_lista = list(dados.values())
@@ -121,9 +127,10 @@ else:
         for i, pedido in enumerate(pedidos_lista):
             st.markdown(f"""
             **Pedido {i+1}**  
-            👤 **Cliente:** {pedido.get('nome', '')}  
-            🍕 **Sabor:** {pedido.get('sabor', '')}  
-            📝 **Obs:** {pedido.get('obs', '')}
+            👤 {pedido.get('nome','')}  
+            🍕 {pedido.get('sabor','')}  
+            📝 {pedido.get('obs','')}
             """)
             st.divider()
     else:
+        st.info("Nenhum pedido ainda")
