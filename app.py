@@ -1,60 +1,77 @@
-# Pizzas-app
 import streamlit as st
-import time
+import firebase_admin
+from firebase_admin import credentials, db
 
-# Estado
-if "pedidos" not in st.session_state:
-    st.session_state.pedidos = []
+# =========================
+# CONEXÃO FIREBASE (SECRETS)
+# =========================
 
-if "atual" not in st.session_state:
-    st.session_state.atual = None
+if not firebase_admin._apps:
+    cred = credentials.Certificate(dict(st.secrets["firebase"]))
 
-st.title("🍕 Pedidos da Pizzaria")
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': 'https://pizza-app-e6fb5-default-rtdb.firebaseio.com'
+    })
 
-# ===== NOVO PEDIDO =====
-st.header("Novo Pedido")
+# =========================
+# INTERFACE
+# =========================
 
-nome = st.text_input("Nome do Cliente")
-pizza = st.text_input("Sabor")
-obs = st.text_input("Observação")
+st.set_page_config(page_title="Sistema de Pedidos", layout="centered")
 
+st.title("🍕 Sistema de Pedidos")
+
+# INPUTS
+nome = st.text_input("Nome do cliente")
+sabor = st.text_input("Sabor da pizza")
+obs = st.text_input("Observações")
+
+# BOTÃO ENVIAR
 if st.button("Enviar Pedido"):
-    if nome and pizza:
-        st.session_state.pedidos.append({
+    if nome and sabor:
+        pedido = {
             "nome": nome,
-            "pizza": pizza,
+            "sabor": sabor,
             "obs": obs
-        })
+        }
+
+        ref = db.reference('pedidos')
+        ref.push(pedido)
+
         st.success("Pedido enviado!")
+    else:
+        st.warning("Preencha nome e sabor")
 
-# ===== PRODUÇÃO =====
-st.header("Produção")
+# =========================
+# LISTAR PEDIDOS
+# =========================
 
-if st.session_state.atual is None and st.session_state.pedidos:
-    st.session_state.atual = st.session_state.pedidos.pop(0)
-    st.session_state.inicio = time.time()
+st.divider()
+st.subheader("📋 Pedidos em tempo real")
 
-if st.session_state.atual:
-    p = st.session_state.atual
+ref = db.reference('pedidos')
+dados = ref.get()
 
-    st.subheader("Pedido Atual")
-    st.write(f"Cliente: {p['nome']}")
-    st.write(f"Pizza: {p['pizza']}")
-    st.write(f"Obs: {p['obs']}")
+if dados:
+    pedidos_lista = list(dados.values())
 
-    tempo_passado = int(time.time() - st.session_state.inicio)
-    tempo_total = 15 * 60
-    restante = max(0, tempo_total - tempo_passado)
+    # mostra do mais recente pro mais antigo
+    pedidos_lista.reverse()
 
-    st.write(f"⏱ {restante//60}:{restante%60:02d}")
+    for i, pedido in enumerate(pedidos_lista):
+        st.markdown(f"""
+        ### Pedido {i+1}
+        👤 **Cliente:** {pedido.get('nome', '')}  
+        🍕 **Sabor:** {pedido.get('sabor', '')}  
+        📝 **Obs:** {pedido.get('obs', '')}
+        """)
+        st.divider()
+else:
+    st.info("Nenhum pedido ainda")
 
-    if st.button("Próximo Pedido"):
-        st.session_state.atual = None
-        st.rerun()
+# =========================
+# BOTÃO ATUALIZAR
+# =========================
 
-# ===== FILA =====
-st.header("Fila")
-
-for i, p in enumerate(st.session_state.pedidos):
-    tempo = 15 + (i * 10)
-    st.write(f"{i+1}. {p['nome']} - {p['pizza']} (⏱ {tempo} min)")
+if st.button("🔄 Atualizar pedidos"):
+    st.rerun()
