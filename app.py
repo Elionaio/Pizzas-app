@@ -203,10 +203,8 @@ else:
             """)
             st.divider()
     else:
-        st.info("Nenhum pedido ainda")            pedidos_lista,
-            key=lambda x: x[1].get("criado_em", 0)
+        st.info("Nenhum pedido ainda")
         
-
         agora = datetime.utcnow()
 
         col1, col2 = st.columns(2)
