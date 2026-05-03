@@ -3,6 +3,7 @@ import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
+from streamlit_mic_recorder import mic_recorder
 
 # =========================
 # AUTO REFRESH
@@ -19,7 +20,7 @@ if not firebase_admin._apps:
     })
 
 # =========================
-# MODO
+# TÍTULO
 # =========================
 st.title("🍕 Sistema de Pedidos")
 
@@ -39,6 +40,23 @@ if modo == "📝 Atendente":
     sabor = st.text_input("Sabor")
     obs = st.text_input("Observações")
 
+    # 🎤 VOZ
+    st.subheader("🎤 Falar Pedido")
+
+    audio = mic_recorder(start_prompt="🎤 Falar", stop_prompt="Parar")
+
+    # ⚠️ ainda não transcreve automaticamente
+    comando = st.text_input("Texto da voz (simulação por enquanto)")
+
+    if comando:
+        st.success(f"Comando capturado: {comando}")
+
+        # exemplo simples
+        if "calabresa" in comando.lower():
+            sabor = "Calabresa"
+        if "sem cebola" in comando.lower():
+            obs = "Sem cebola"
+
     if st.button("Enviar Pedido"):
         if nome and sabor:
             pedido = {
@@ -53,7 +71,7 @@ if modo == "📝 Atendente":
             st.warning("Preencha nome e sabor")
 
 # =========================
-# 🔥 PRODUÇÃO (TELA GRANDE)
+# 🔥 PRODUÇÃO
 # =========================
 elif modo == "🔥 Produção":
 
