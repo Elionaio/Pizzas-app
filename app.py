@@ -40,15 +40,17 @@ if modo == "📝 Atendente":
     sabor = st.text_input("Sabor")
     obs = st.text_input("Observações")
 
-    # 🎤 VOZ
+    # =========================
+    # 🎤 VOZ (FUNCIONAL)
+    # =========================
     st.subheader("🎤 Falar")
 
-    comando = components.html("""
+    components.html("""
         <button onclick="startRecognition()" style="font-size:20px;padding:10px;">
         🎤 Falar
         </button>
 
-        <p id="output"></p>
+        <input id="campo" style="width:100%;font-size:18px;margin-top:10px;" placeholder="Fale algo..." />
 
         <script>
         function startRecognition() {
@@ -58,20 +60,16 @@ if modo == "📝 Atendente":
 
             recognition.onresult = function(event) {
                 var text = event.results[0][0].transcript;
-
-                window.parent.postMessage({
-                    type: "streamlit:setComponentValue",
-                    value: text
-                }, "*");
+                document.getElementById("campo").value = text;
             }
         }
         </script>
-    """, height=100)
+    """, height=150)
 
-    if comando:
-        st.success(f"Você disse: {comando}")
+    voz_texto = st.text_input("Texto capturado por voz")
 
-        c = comando.lower()
+    if voz_texto:
+        c = voz_texto.lower()
 
         if "calabresa" in c:
             sabor = "Calabresa"
@@ -177,9 +175,7 @@ elif modo == "🔥 Produção":
 # =========================
 # 📋 LISTA
 # =========================
-else:
-
-    st.subheader("Lista de Pedidos")
+elif modo == "📋 Lista":
 
     if dados:
         pedidos_lista = list(dados.values())
