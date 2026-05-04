@@ -19,9 +19,6 @@ if not firebase_admin._apps:
         'databaseURL': 'https://pizza-app-e6fb5-default-rtdb.firebaseio.com'
     })
 
-# =========================
-# TÍTULO
-# =========================
 st.title("🍕 Sistema de Pedidos")
 
 modo = st.radio("Modo", ["📝 Atendente", "🔥 Produção", "📋 Lista"])
@@ -41,32 +38,54 @@ if modo == "📝 Atendente":
     obs = st.text_input("Observações")
 
     # =========================
-    # 🎤 VOZ (FUNCIONAL)
+    # 🎤 VOZ (DITADO + COPIAR)
     # =========================
-    st.subheader("🎤 Falar")
+    st.subheader("🎤 Ditado por voz")
 
     components.html("""
-        <button onclick="startRecognition()" style="font-size:20px;padding:10px;">
+        <button onclick="startRecognition()" style="font-size:18px;padding:10px;">
         🎤 Falar
         </button>
 
-        <input id="campo" style="width:100%;font-size:18px;margin-top:10px;" placeholder="Fale algo..." />
+        <input id="campo" style="width:100%;font-size:18px;margin-top:10px;" placeholder="O texto aparece aqui..." />
+
+        <button onclick="copiar()" style="margin-top:10px;padding:8px;">
+        📋 Copiar texto
+        </button>
 
         <script>
+        var recognition;
+
         function startRecognition() {
-            var recognition = new webkitSpeechRecognition();
+            recognition = new webkitSpeechRecognition();
+
             recognition.lang = "pt-BR";
+            recognition.interimResults = true;
+            recognition.continuous = true;
+
             recognition.start();
 
             recognition.onresult = function(event) {
-                var text = event.results[0][0].transcript;
-                document.getElementById("campo").value = text;
-            }
+                let texto = "";
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    texto += event.results[i][0].transcript;
+                }
+
+                document.getElementById("campo").value = texto;
+            };
+        }
+
+        function copiar() {
+            var campo = document.getElementById("campo");
+            campo.select();
+            document.execCommand("copy");
+            alert("Texto copiado!");
         }
         </script>
-    """, height=150)
+    """, height=180)
 
-    voz_texto = st.text_input("Texto capturado por voz")
+    voz_texto = st.text_input("Colar texto da voz aqui (copiado)")
 
     if voz_texto:
         c = voz_texto.lower()
@@ -169,13 +188,14 @@ elif modo == "🔥 Produção":
                     if st.button("Finalizar", key=key):
                         db.reference(f'pedidos/{key}').delete()
                         st.rerun()
+
     else:
         st.info("Sem pedidos")
 
 # =========================
 # 📋 LISTA
 # =========================
-elif modo == "📋 Lista":
+else:
 
     if dados:
         pedidos_lista = list(dados.values())
