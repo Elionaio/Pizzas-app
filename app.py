@@ -8,7 +8,7 @@ from streamlit_autorefresh import st_autorefresh
 # =========================
 # AUTO REFRESH
 # =========================
-st_autorefresh(interval=2000, key="refresh")
+st_autorefresh(interval=1000, key="refresh")
 
 # =========================
 # FIREBASE
