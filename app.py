@@ -2,13 +2,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, db
-from datetime import datetime, timedelta
+from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # =========================
 # AUTO REFRESH
 # =========================
-st_autorefresh(interval=1000, key="refresh")
+st_autorefresh(interval=2000, key="refresh")
 
 # =========================
 # FIREBASE
@@ -37,11 +37,7 @@ if modo == "📝 Atendente":
     sabor = st.text_input("Sabor")
     obs = st.text_input("Observações")
 
-    # =========================
-    # 🎤 VOZ FUNCIONAL
-    # =========================
     st.subheader("🎤 Ditado por voz")
-
     voz = st.text_input("Texto da voz")
 
     components.html("""
@@ -55,7 +51,6 @@ if modo == "📝 Atendente":
     function startRecognition() {
 
         const recognition = new webkitSpeechRecognition();
-
         recognition.lang = "pt-BR";
         recognition.continuous = false;
         recognition.interimResults = false;
@@ -69,7 +64,6 @@ if modo == "📝 Atendente":
 
             document.getElementById("status").innerHTML = "Você disse: " + text;
 
-            // ⚠️ mais seguro: pega o último input (voz)
             const inputs = window.parent.document.querySelectorAll('input');
             const voiceInput = inputs[inputs.length - 1];
 
@@ -78,16 +72,12 @@ if modo == "📝 Atendente":
                 voiceInput.dispatchEvent(new Event("input", { bubbles: true }));
             }
         };
-
-        recognition.onerror = function(event) {
-            document.getElementById("status").innerHTML = "Erro: " + event.error;
-        };
     }
     </script>
     """, height=120)
 
     # =========================
-    # PROCESSAMENTO VOZ
+    # VOZ LÓGICA
     # =========================
     if voz:
         st.success(f"🎤 Você disse: {voz}")
@@ -115,7 +105,7 @@ if modo == "📝 Atendente":
                 "obs": obs,
                 "criado_em": datetime.utcnow().timestamp(),
                 "inicio": None,
-                "status": "novo"
+                "tempo_preparo": 15  # 🔥 FIXO POR PEDIDO (IMPORTANTE)
             }
 
             ref.push(pedido)
@@ -142,13 +132,11 @@ elif modo == "🔥 Produção":
 
         for i, (key, pedido) in enumerate(pedidos_ativos):
 
-            tempo_preparo = 15 + (i * 10)
-
+            # =========================
+            # INÍCIO FIXO (SÓ 1 VEZ)
+            # =========================
             inicio = pedido.get("inicio")
 
-            # =========================
-            # INICIAR SÓ UMA VEZ
-            # =========================
             if inicio is None:
                 inicio = agora
                 db.reference(f'pedidos/{key}').update({
@@ -156,7 +144,12 @@ elif modo == "🔥 Produção":
                     "status": "em_preparo"
                 })
 
-            fim = inicio + (tempo_preparo * 60)
+            # =========================
+            # TEMPO REAL DO PEDIDO
+            # =========================
+            tempo_preparo = pedido.get("tempo_preparo", 15) * 60
+
+            fim = inicio + tempo_preparo
             restante = fim - agora
 
             minutos = int(restante // 60)
@@ -220,8 +213,7 @@ else:
         for i, pedido in enumerate(pedidos_lista):
 
             st.markdown(f"""
-            **Pedido {i+1}**  
-            👤 {pedido.get('nome','')}  
+            **👤 {pedido.get('nome','')}**  
             🍕 {pedido.get('sabor','')}  
             📝 {pedido.get('obs','')}  
             ⏱ {pedido.get('status','')}
