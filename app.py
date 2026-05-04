@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timedelta
@@ -38,57 +37,57 @@ if modo == "📝 Atendente":
     obs = st.text_input("Observações")
 
     # =========================
-    # 🎤 VOZ (DITADO + COPIAR)
+    # 🎤 VOZ (CORRETA E FUNCIONAL)
     # =========================
     st.subheader("🎤 Ditado por voz")
 
-    components.html("""
-        <button onclick="startRecognition()" style="font-size:18px;padding:10px;">
-        🎤 Falar
-        </button>
+    voz = st.text_input("Fale ou cole o texto aqui (voz vai aparecer aqui)")
 
-        <input id="campo" style="width:100%;font-size:18px;margin-top:10px;" placeholder="O texto aparece aqui..." />
+    st.markdown("""
+    <button onclick="startRecognition()" style="font-size:18px;padding:10px;">
+    🎤 Falar
+    </button>
 
-        <button onclick="copiar()" style="margin-top:10px;padding:8px;">
-        📋 Copiar texto
-        </button>
+    <p id="status">Clique e fale</p>
 
-        <script>
-        var recognition;
+    <script>
+    function startRecognition() {
+        const recognition = new webkitSpeechRecognition();
 
-        function startRecognition() {
-            recognition = new webkitSpeechRecognition();
+        recognition.lang = "pt-BR";
+        recognition.continuous = false;
+        recognition.interimResults = false;
 
-            recognition.lang = "pt-BR";
-            recognition.interimResults = true;
-            recognition.continuous = true;
+        document.getElementById("status").innerHTML = "Ouvindo...";
 
-            recognition.start();
+        recognition.start();
 
-            recognition.onresult = function(event) {
-                let texto = "";
+        recognition.onresult = function(event) {
+            const text = event.results[0][0].transcript;
 
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    texto += event.results[i][0].transcript;
-                }
+            document.getElementById("status").innerHTML = "Você disse: " + text;
 
-                document.getElementById("campo").value = texto;
-            };
-        }
+            // envia para Streamlit
+            window.parent.postMessage({
+                type: "streamlit:setComponentValue",
+                value: text
+            }, "*");
+        };
 
-        function copiar() {
-            var campo = document.getElementById("campo");
-            campo.select();
-            document.execCommand("copy");
-            alert("Texto copiado!");
-        }
-        </script>
-    """, height=180)
+        recognition.onerror = function(event) {
+            document.getElementById("status").innerHTML = "Erro: " + event.error;
+        };
+    }
+    </script>
+    """, unsafe_allow_html=True)
 
-    voz_texto = st.text_input("Colar texto da voz aqui (copiado)")
+    # =========================
+    # USO DO TEXTO DE VOZ
+    # =========================
+    if voz:
+        st.success(f"🎤 Você disse: {voz}")
 
-    if voz_texto:
-        c = voz_texto.lower()
+        c = voz.lower()
 
         if "calabresa" in c:
             sabor = "Calabresa"
@@ -99,6 +98,9 @@ if modo == "📝 Atendente":
         if "sem cebola" in c:
             obs = "Sem cebola"
 
+    # =========================
+    # ENVIAR PEDIDO
+    # =========================
     if st.button("Enviar Pedido"):
         if nome and sabor:
             pedido = {
@@ -182,6 +184,7 @@ elif modo == "🔥 Produção":
                     if st.button("Finalizar", key=key):
                         db.reference(f'pedidos/{key}').delete()
                         st.rerun()
+
             else:
                 with col2:
                     st.markdown(bloco, unsafe_allow_html=True)
