@@ -6,9 +6,9 @@ from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # =========================
-# AUTO REFRESH
+# AUTO REFRESH (1s)
 # =========================
-st_autorefresh(interval=2000, key="refresh")
+st_autorefresh(interval=1000, key="refresh")
 
 # =========================
 # FIREBASE
@@ -19,7 +19,7 @@ if not firebase_admin._apps:
         'databaseURL': 'https://pizza-app-e6fb5-default-rtdb.firebaseio.com'
     })
 
-st.title("🍕 Sistema de Pedidos")
+st.title("🍕 Sistema de Pedidos PRO")
 
 modo = st.radio("Modo", ["📝 Atendente", "🔥 Produção", "📋 Lista"])
 
@@ -37,67 +37,16 @@ if modo == "📝 Atendente":
     sabor = st.text_input("Sabor")
     obs = st.text_input("Observações")
 
-    st.subheader("🎤 Ditado por voz")
-    voz = st.text_input("Texto da voz")
-
-    components.html("""
-    <button onclick="startRecognition()" style="font-size:18px;padding:10px;">
-        🎤 Falar
-    </button>
-
-    <p id="status">Clique e fale</p>
-
-    <script>
-    function startRecognition() {
-
-        const recognition = new webkitSpeechRecognition();
-        recognition.lang = "pt-BR";
-        recognition.continuous = false;
-        recognition.interimResults = false;
-
-        document.getElementById("status").innerHTML = "Ouvindo...";
-
-        recognition.start();
-
-        recognition.onresult = function(event) {
-            const text = event.results[0][0].transcript;
-
-            document.getElementById("status").innerHTML = "Você disse: " + text;
-
-            const inputs = window.parent.document.querySelectorAll('input');
-            const voiceInput = inputs[inputs.length - 1];
-
-            if (voiceInput) {
-                voiceInput.value = text;
-                voiceInput.dispatchEvent(new Event("input", { bubbles: true }));
-            }
-        };
-    }
-    </script>
-    """, height=120)
-
-    # =========================
-    # VOZ LÓGICA
-    # =========================
-    if voz:
-        st.success(f"🎤 Você disse: {voz}")
-
-        c = voz.lower()
-
-        if "calabresa" in c:
-            sabor = "Calabresa"
-        elif "frango" in c:
-            sabor = "Frango"
-
-        if "sem cebola" in c:
-            obs = "Sem cebola"
-
-    # =========================
-    # ENVIAR PEDIDO
-    # =========================
     if st.button("Enviar Pedido"):
 
         if nome and sabor:
+
+            # 🔥 posição atual da fila = tamanho atual
+            posicao_fila = len(dados)
+
+            # 🔥 tempo base + atraso por fila (fixo no pedido)
+            tempo_base = 15
+            tempo_total = tempo_base + (posicao_fila * 10)
 
             pedido = {
                 "nome": nome,
@@ -105,7 +54,8 @@ if modo == "📝 Atendente":
                 "obs": obs,
                 "criado_em": datetime.utcnow().timestamp(),
                 "inicio": None,
-                "tempo_preparo": 15  # 🔥 FIXO POR PEDIDO (IMPORTANTE)
+                "tempo_total": tempo_total * 60,  # segundos
+                "status": "novo"
             }
 
             ref.push(pedido)
@@ -120,106 +70,120 @@ if modo == "📝 Atendente":
 # =========================
 elif modo == "🔥 Produção":
 
-    if dados:
+    pedidos = list(dados.items())
 
-        pedidos_lista = list(dados.items())
-        pedidos_lista.sort(key=lambda x: x[1].get("criado_em", 0))
+    # ordem real de chegada
+    pedidos.sort(key=lambda x: x[1].get("criado_em", 0))
 
-        agora = datetime.utcnow().timestamp()
+    agora = datetime.utcnow().timestamp()
 
-        col1, col2 = st.columns(2)
-        pedidos_ativos = pedidos_lista[:2]
+    col1, col2 = st.columns(2)
 
-        for i, (key, pedido) in enumerate(pedidos_ativos):
+    ativos = pedidos[:2]
 
-            # =========================
-            # INÍCIO FIXO (SÓ 1 VEZ)
-            # =========================
-            inicio = pedido.get("inicio")
+    for i, (key, p) in enumerate(ativos):
 
-            if inicio is None:
-                inicio = agora
-                db.reference(f'pedidos/{key}').update({
-                    "inicio": inicio,
-                    "status": "em_preparo"
-                })
+        # =========================
+        # INÍCIO FIXO (NÃO MUDA MAIS)
+        # =========================
+        inicio = p.get("inicio")
 
-            # =========================
-            # TEMPO REAL DO PEDIDO
-            # =========================
-            tempo_preparo = pedido.get("tempo_preparo", 15) * 60
+        if inicio is None:
+            inicio = agora
+            db.reference(f'pedidos/{key}').update({
+                "inicio": inicio,
+                "status": "em_preparo"
+            })
 
-            fim = inicio + tempo_preparo
-            restante = fim - agora
+        # =========================
+        # TIMER REAL
+        # =========================
+        fim = inicio + p.get("tempo_total", 900)
+        restante = fim - agora
 
-            minutos = int(restante // 60)
-            segundos = int(restante % 60)
+        minutos = int(restante // 60)
+        segundos = int(restante % 60)
 
-            # =========================
-            # STATUS
-            # =========================
-            if restante <= 0:
-                status = "✅ PRONTO"
-                cor = "#16a34a"
-            elif restante < 300:
-                status = "⚠️ QUASE"
-                cor = "#f59e0b"
-            else:
-                status = "🔥 EM PREPARO"
-                cor = "#dc2626"
+        # =========================
+        # STATUS VISUAL
+        # =========================
+        if restante <= 0:
+            status = "✅ PRONTO"
+            cor = "#16a34a"
+        elif restante < 300:
+            status = "⚠️ QUASE PRONTO"
+            cor = "#f59e0b"
+        else:
+            status = "🔥 EM PREPARO"
+            cor = "#dc2626"
 
-            bloco = f"""
-            <div style="
-                height:300px;
-                display:flex;
-                flex-direction:column;
-                justify-content:center;
-                align-items:center;
-                border-radius:15px;
-                background:{cor};
-                color:white;
-                text-align:center;
-                font-family:Arial;
-            ">
-                <h2>{pedido.get('sabor','')}</h2>
-                <h3>{pedido.get('nome','')}</h3>
-                <h1>{minutos}m {segundos}s</h1>
-                <p>{status}</p>
-            </div>
-            """
+        bloco = f"""
+        <div style="
+            height:280px;
+            display:flex;
+            flex-direction:column;
+            justify-content:center;
+            align-items:center;
+            border-radius:16px;
+            background:{cor};
+            color:white;
+            font-family:Arial;
+            box-shadow:0 6px 18px rgba(0,0,0,0.2);
+        ">
+            <h2>{p.get('sabor','')}</h2>
+            <h3>{p.get('nome','')}</h3>
+            <h1>{minutos}m {segundos}s</h1>
+            <p>{status}</p>
+        </div>
+        """
 
-            col = col1 if i == 0 else col2
+        col = col1 if i == 0 else col2
 
-            with col:
-                st.markdown(bloco, unsafe_allow_html=True)
+        with col:
+            st.markdown(bloco, unsafe_allow_html=True)
 
-                if st.button("Finalizar", key=key):
-                    db.reference(f'pedidos/{key}').delete()
-                    st.rerun()
+            if st.button("Finalizar", key=key):
+                db.reference(f'pedidos/{key}').delete()
+                st.rerun()
 
-    else:
-        st.info("Sem pedidos")
+    if not ativos:
+        st.info("Nenhum pedido em produção")
 
 # =========================
-# 📋 LISTA
+# 📋 LISTA (MELHORADA)
 # =========================
 else:
 
-    if dados:
+    if not dados:
+        st.info("Nenhum pedido ainda")
+    else:
 
-        pedidos_lista = list(dados.values())
-        pedidos_lista.reverse()
+        st.subheader("📋 Todos os pedidos")
 
-        for i, pedido in enumerate(pedidos_lista):
+        pedidos = list(dados.items())
+        pedidos.sort(key=lambda x: x[1].get("criado_em", 0), reverse=True)
+
+        for key, p in pedidos:
+
+            status = p.get("status", "novo")
+
+            cor = {
+                "novo": "#3b82f6",
+                "em_preparo": "#f59e0b",
+                "pronto": "#16a34a"
+            }.get(status, "#999")
 
             st.markdown(f"""
-            **👤 {pedido.get('nome','')}**  
-            🍕 {pedido.get('sabor','')}  
-            📝 {pedido.get('obs','')}  
-            ⏱ {pedido.get('status','')}
-            """)
-
-            st.divider()
-
-    else:
-        st.info("Nenhum pedido ainda")
+            <div style="
+                padding:10px;
+                border-left:6px solid {cor};
+                margin-bottom:10px;
+                background:#1111;
+                border-radius:8px;
+            ">
+                👤 <b>{p.get('nome','')}</b><br>
+                🍕 {p.get('sabor','')}<br>
+                📝 {p.get('obs','')}<br>
+                ⏱ {status}
+            </div>
+            """, unsafe_allow_html=True)
