@@ -24,7 +24,7 @@ st.title("🍕 Sistema de Pedidos")
 modo = st.radio("Modo", ["📝 Atendente", "🔥 Produção", "📋 Lista"])
 
 ref = db.reference('pedidos')
-dados = ref.get()
+dados = ref.get() or {}
 
 # =========================
 # 📝 ATENDENTE
@@ -38,11 +38,11 @@ if modo == "📝 Atendente":
     obs = st.text_input("Observações")
 
     # =========================
-    # 🎤 VOZ FUNCIONAL (PONTE REAL)
+    # 🎤 VOZ FUNCIONAL
     # =========================
     st.subheader("🎤 Ditado por voz")
 
-    voz = st.text_input("Texto da voz (vai aparecer aqui)")
+    voz = st.text_input("Texto da voz")
 
     components.html("""
     <button onclick="startRecognition()" style="font-size:18px;padding:10px;">
@@ -69,12 +69,13 @@ if modo == "📝 Atendente":
 
             document.getElementById("status").innerHTML = "Você disse: " + text;
 
-            // envia para Streamlit corretamente
-            const input = window.parent.document.querySelectorAll('input')[0];
+            // ⚠️ mais seguro: pega o último input (voz)
+            const inputs = window.parent.document.querySelectorAll('input');
+            const voiceInput = inputs[inputs.length - 1];
 
-            if (input) {
-                input.value = text;
-                input.dispatchEvent(new Event("input", { bubbles: true }));
+            if (voiceInput) {
+                voiceInput.value = text;
+                voiceInput.dispatchEvent(new Event("input", { bubbles: true }));
             }
         };
 
@@ -86,7 +87,7 @@ if modo == "📝 Atendente":
     """, height=120)
 
     # =========================
-    # USO DO TEXTO
+    # PROCESSAMENTO VOZ
     # =========================
     if voz:
         st.success(f"🎤 Você disse: {voz}")
@@ -95,8 +96,7 @@ if modo == "📝 Atendente":
 
         if "calabresa" in c:
             sabor = "Calabresa"
-
-        if "frango" in c:
+        elif "frango" in c:
             sabor = "Frango"
 
         if "sem cebola" in c:
@@ -106,15 +106,22 @@ if modo == "📝 Atendente":
     # ENVIAR PEDIDO
     # =========================
     if st.button("Enviar Pedido"):
+
         if nome and sabor:
+
             pedido = {
                 "nome": nome,
                 "sabor": sabor,
                 "obs": obs,
-                "criado_em": datetime.utcnow().timestamp()
+                "criado_em": datetime.utcnow().timestamp(),
+                "inicio": None,
+                "status": "novo"
             }
-            db.reference('pedidos').push(pedido)
+
+            ref.push(pedido)
+
             st.success("Pedido enviado!")
+
         else:
             st.warning("Preencha nome e sabor")
 
@@ -124,14 +131,11 @@ if modo == "📝 Atendente":
 elif modo == "🔥 Produção":
 
     if dados:
+
         pedidos_lista = list(dados.items())
+        pedidos_lista.sort(key=lambda x: x[1].get("criado_em", 0))
 
-        pedidos_lista = sorted(
-            pedidos_lista,
-            key=lambda x: x[1].get("criado_em", 0)
-        )
-
-        agora = datetime.utcnow()
+        agora = datetime.utcnow().timestamp()
 
         col1, col2 = st.columns(2)
         pedidos_ativos = pedidos_lista[:2]
@@ -140,23 +144,31 @@ elif modo == "🔥 Produção":
 
             tempo_preparo = 15 + (i * 10)
 
-            if "inicio" not in pedido:
-                inicio_ts = datetime.utcnow().timestamp()
-                db.reference(f'pedidos/{key}/inicio').set(inicio_ts)
-                inicio = datetime.fromtimestamp(inicio_ts)
-            else:
-                inicio = datetime.fromtimestamp(pedido["inicio"])
+            inicio = pedido.get("inicio")
 
-            fim = inicio + timedelta(minutes=tempo_preparo)
+            # =========================
+            # INICIAR SÓ UMA VEZ
+            # =========================
+            if inicio is None:
+                inicio = agora
+                db.reference(f'pedidos/{key}').update({
+                    "inicio": inicio,
+                    "status": "em_preparo"
+                })
+
+            fim = inicio + (tempo_preparo * 60)
             restante = fim - agora
 
-            minutos = int(restante.total_seconds() // 60)
-            segundos = int(restante.total_seconds() % 60)
+            minutos = int(restante // 60)
+            segundos = int(restante % 60)
 
-            if restante.total_seconds() <= 0:
+            # =========================
+            # STATUS
+            # =========================
+            if restante <= 0:
                 status = "✅ PRONTO"
                 cor = "#16a34a"
-            elif restante.total_seconds() < 300:
+            elif restante < 300:
                 status = "⚠️ QUASE"
                 cor = "#f59e0b"
             else:
@@ -174,6 +186,7 @@ elif modo == "🔥 Produção":
                 background:{cor};
                 color:white;
                 text-align:center;
+                font-family:Arial;
             ">
                 <h2>{pedido.get('sabor','')}</h2>
                 <h3>{pedido.get('nome','')}</h3>
@@ -182,19 +195,14 @@ elif modo == "🔥 Produção":
             </div>
             """
 
-            if i == 0:
-                with col1:
-                    st.markdown(bloco, unsafe_allow_html=True)
-                    if st.button("Finalizar", key=key):
-                        db.reference(f'pedidos/{key}').delete()
-                        st.rerun()
+            col = col1 if i == 0 else col2
 
-            else:
-                with col2:
-                    st.markdown(bloco, unsafe_allow_html=True)
-                    if st.button("Finalizar", key=key):
-                        db.reference(f'pedidos/{key}').delete()
-                        st.rerun()
+            with col:
+                st.markdown(bloco, unsafe_allow_html=True)
+
+                if st.button("Finalizar", key=key):
+                    db.reference(f'pedidos/{key}').delete()
+                    st.rerun()
 
     else:
         st.info("Sem pedidos")
@@ -205,16 +213,21 @@ elif modo == "🔥 Produção":
 else:
 
     if dados:
+
         pedidos_lista = list(dados.values())
         pedidos_lista.reverse()
 
         for i, pedido in enumerate(pedidos_lista):
+
             st.markdown(f"""
             **Pedido {i+1}**  
             👤 {pedido.get('nome','')}  
             🍕 {pedido.get('sabor','')}  
-            📝 {pedido.get('obs','')}
+            📝 {pedido.get('obs','')}  
+            ⏱ {pedido.get('status','')}
             """)
+
             st.divider()
+
     else:
         st.info("Nenhum pedido ainda")
