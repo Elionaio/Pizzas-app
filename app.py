@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timedelta
@@ -37,21 +38,22 @@ if modo == "📝 Atendente":
     obs = st.text_input("Observações")
 
     # =========================
-    # 🎤 VOZ (CORRETA E FUNCIONAL)
+    # 🎤 VOZ FUNCIONAL (PONTE REAL)
     # =========================
     st.subheader("🎤 Ditado por voz")
 
-    voz = st.text_input("Fale ou cole o texto aqui (voz vai aparecer aqui)")
+    voz = st.text_input("Texto da voz (vai aparecer aqui)")
 
-    st.markdown("""
+    components.html("""
     <button onclick="startRecognition()" style="font-size:18px;padding:10px;">
-    🎤 Falar
+        🎤 Falar
     </button>
 
     <p id="status">Clique e fale</p>
 
     <script>
     function startRecognition() {
+
         const recognition = new webkitSpeechRecognition();
 
         recognition.lang = "pt-BR";
@@ -67,11 +69,13 @@ if modo == "📝 Atendente":
 
             document.getElementById("status").innerHTML = "Você disse: " + text;
 
-            // envia para Streamlit
-            window.parent.postMessage({
-                type: "streamlit:setComponentValue",
-                value: text
-            }, "*");
+            // envia para Streamlit corretamente
+            const input = window.parent.document.querySelectorAll('input')[0];
+
+            if (input) {
+                input.value = text;
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+            }
         };
 
         recognition.onerror = function(event) {
@@ -79,10 +83,10 @@ if modo == "📝 Atendente":
         };
     }
     </script>
-    """, unsafe_allow_html=True)
+    """, height=120)
 
     # =========================
-    # USO DO TEXTO DE VOZ
+    # USO DO TEXTO
     # =========================
     if voz:
         st.success(f"🎤 Você disse: {voz}")
